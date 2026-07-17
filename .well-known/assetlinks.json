@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "net.sfkey.health",
+      "sha256_cert_fingerprints": [
+        "12:3F:B6:74:04:05:3D:AC:BD:A8:31:99:30:00:02:8C:42:55:A1:21:2C:1D:7E:3A:6C:7A:07:0E:D6:64:5C:BE"
+      ]
+    }
+  }
+]
