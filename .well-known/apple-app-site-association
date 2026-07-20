@@ -4,7 +4,7 @@
     "details": [
       {
         "appID": "VD3M9X8A3B.net.sfkey.health",
-        "paths": ["/auth/callback", "/auth/callback/*", "/auth/logout", "/auth/logout/*"]
+        "paths": ["/auth/callback", "/auth/callback/*", "/auth/logout", "/auth/logout/*", "/invite", "/invite/*"]
       }
     ]
   }
