@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SFKey Health 重置密码</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1A3D2B;
+    color: #FFFFFF;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  .card {
+    max-width: 360px;
+    width: 100%;
+    background: #FFFFFF;
+    color: #1A3D2B;
+    border-radius: 20px;
+    padding: 32px 24px;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  }
+  .title { font-size: 18px; font-weight: 600; margin: 0 0 8px; }
+  .subtitle { font-size: 14px; color: #666; margin: 0 0 24px; line-height: 1.6; }
+  .open-btn {
+    display: block;
+    width: 100%;
+    background: #C9A84C;
+    color: #1A3D2B;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    padding: 14px 20px;
+    font-size: 15px;
+    cursor: pointer;
+    box-sizing: border-box;
+    margin: 0 0 16px;
+    text-decoration: none;
+  }
+  .hint { font-size: 13px; color: #888; line-height: 1.6; }
+  .error {
+    font-size: 14px;
+    color: #B3261E;
+    margin: 0 0 20px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <p class="title" id="title">正在打开 SFKey Health App…</p>
+    <p class="subtitle" id="subtitle">请在弹出的提示中选择"打开"，回到 App 内完成密码重置。</p>
+    <a class="open-btn" id="openBtn" href="#">没有自动跳转？点这里打开 App</a>
+    <p class="hint" id="hint">如果没有反应，请确认手机上已经安装 SFKey Health App，然后重新点这个按钮。链接如果已经用过或者已经过期，请回到 App 内重新申请一次"忘记密码"。</p>
+  </div>
+  <script>
+    // 这个页面存在的唯一原因：Supabase重置密码邮件里的链接，第一跳
+    // 落在 ptmfqxfmymhzqgpkxixm.supabase.co（Supabase自己的验证域名），
+    // 该域名不在App的Associated Domains/App Links清单里，然后才302
+    // 跳转到 auth.sfkey.net/auth/reset-password——iOS Universal Links/
+    // Android App Links都只认"用户直接点的那个链接"，经过跳转之后落地
+    // 的页面不会被系统当成"新的一次链接点击"去重新匹配，所以Universal
+    // Links在这个场景下必然拦截失败，用户一定会真的落到这个网页，不是
+    // 极端情况——这个页面必须是能真正工作的落地页，不能只是等App来
+        // 拦截的空占位。
+    //
+    // 解决方式：这个网页自己主动用自定义URL scheme（sfkv1core://）跳转
+    // 拉起App——自定义scheme不受"必须是直接点击"这条限制，网页脚本
+    // 发起跳转一样有效。iOS和Android注册这个scheme时host要求不一样
+    // （iOS没限制host，Android的intent-filter把host写死成了
+    // sfkv1core.com，不是auth.sfkey.net），所以两个平台拼出来的跳转
+    // URL不一样，用UA判断分别处理。
+    //
+    // access_token/refresh_token在Supabase implicit flow里是放在URL
+    // fragment（#后面）而不是query string，必须原样透传，不能自己
+    // 重新解析再拼装（避免手误改变参数顺序/编码导致App侧解析失败）。
+    const hash = window.location.hash; // 含开头的#，可能为空
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS UA伪装成Mac的情况
+
+    let appUrl;
+    if (isAndroid) {
+      // AndroidManifest.xml里这个scheme的intent-filter要求host必须是
+      // sfkv1core.com，host写别的值系统不会匹配到App，只会弹"用什么
+      // 打开"或者直接什么都不发生。
+      appUrl = 'sfkv1core://sfkv1core.com/auth/reset-password' + hash;
+    } else {
+      // iOS这边CFBundleURLSchemes没有限制host，保留auth.sfkey.net这个
+      // host跟path，是为了让lib/password_recovery/password_recovery_listener.dart
+      // 里现成的_isRecoveryLink()（按host+path匹配）不用改代码也能直接
+      // 认出这条链接。
+      appUrl = 'sfkv1core://auth.sfkey.net/auth/reset-password' + hash;
+    }
+
+    document.getElementById('openBtn').href = appUrl;
+
+    if (!hash || hash.indexOf('access_token') === -1) {
+      // 没带token，大概率是有人直接手动访问这个路径，不是真的从重置
+      // 邮件点进来的——不用尝试跳转，跳了也没用（App侧getSessionFromUrl
+      // 会因为拿不到token直接静默失败）。
+      document.getElementById('title').textContent = '链接缺少必要信息';
+      document.getElementById('title').className = 'title error';
+      document.getElementById('subtitle').textContent = '请回到 App 内重新申请一次"忘记密码"，用邮件里最新的链接。';
+      document.getElementById('openBtn').style.display = 'none';
+    } else {
+      // 自动尝试跳转——不保证一定成功（部分浏览器/webview会拦截页面
+      // 加载时立即发起的scheme跳转，尤其是邮件App内置浏览器），所以
+      // 上面那个手动按钮必须留着当兜底，不能只依赖这一行。
+      window.location.href = appUrl;
+    }
+  </script>
+</body>
+</html>
