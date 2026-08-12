@@ -55,10 +55,10 @@
 </head>
 <body>
   <div class="card">
-    <p class="title" id="title">正在打开 SFKey Health App…</p>
-    <p class="subtitle" id="subtitle">请在弹出的提示中选择"打开"，回到 App 内完成密码重置。</p>
-    <a class="open-btn" id="openBtn" href="#">没有自动跳转？点这里打开 App</a>
-    <p class="hint" id="hint">如果没有反应，请确认手机上已经安装 SFKey Health App，然后重新点这个按钮。链接如果已经用过或者已经过期，请回到 App 内重新申请一次"忘记密码"。</p>
+    <p class="title" id="title">重置密码</p>
+    <p class="subtitle" id="subtitle">点下面的按钮打开 SFKey Health App，回到 App 内完成密码重置。</p>
+    <a class="open-btn" id="openBtn" href="#">打开 SFKey Health App</a>
+    <p class="hint" id="hint">如果没有反应，请确认手机上已经安装 SFKey Health App。链接如果已经用过或者已经过期，请回到 App 内重新申请一次"忘记密码"。</p>
   </div>
   <script>
     // 这个页面存在的唯一原因：Supabase重置密码邮件里的链接，第一跳
@@ -100,21 +100,31 @@
       appUrl = 'sfkv1core://auth.sfkey.net/auth/reset-password' + hash;
     }
 
-    document.getElementById('openBtn').href = appUrl;
+    const openBtn = document.getElementById('openBtn');
+    openBtn.href = appUrl;
 
     if (!hash || hash.indexOf('access_token') === -1) {
       // 没带token，大概率是有人直接手动访问这个路径，不是真的从重置
-      // 邮件点进来的——不用尝试跳转，跳了也没用（App侧getSessionFromUrl
+      // 邮件点进来的——不用给按钮，点了也没用（App侧getSessionFromUrl
       // 会因为拿不到token直接静默失败）。
       document.getElementById('title').textContent = '链接缺少必要信息';
       document.getElementById('title').className = 'title error';
       document.getElementById('subtitle').textContent = '请回到 App 内重新申请一次"忘记密码"，用邮件里最新的链接。';
-      document.getElementById('openBtn').style.display = 'none';
+      openBtn.style.display = 'none';
     } else {
-      // 自动尝试跳转——不保证一定成功（部分浏览器/webview会拦截页面
-      // 加载时立即发起的scheme跳转，尤其是邮件App内置浏览器），所以
-      // 上面那个手动按钮必须留着当兜底，不能只依赖这一行。
-      window.location.href = appUrl;
+      // 2026-08-12真机测试发现：页面刚加载时脚本自己发起的
+      // window.location.href跳转（不绑定任何用户点击事件）在真机Safari
+      // 上完全没反应——不只是"不保证成功"，是这次真实测试里彻底没
+      // 触发，连按钮后续的点击也一起失效了（怀疑是WebKit把这类
+      // "页面一加载就尝试跳转自定义scheme"当成滥用信号，之后同一个
+      // scheme的后续跳转请求也会被压制，不只是这一次单独失败）。
+      // 所以这版彻底不在页面加载时自动尝试跳转，只在按钮的真实点击
+      // 事件里跳转——保证每一次跳转尝试都绑定在一次真实的用户手势上，
+      // 不给WebKit任何理由拦截。
+      openBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        window.location.href = appUrl;
+      });
     }
   </script>
 </body>
