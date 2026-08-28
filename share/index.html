@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>SFK Wellness · Shared Health Report</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #F5F3EE; color: #1A3D2B;
+  }
+  .card {
+    max-width: 480px; width: 100%; background: #FFFFFF; border-radius: 16px;
+    padding: 28px 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); text-align: center;
+  }
+  h1 { font-size: 17px; margin: 0 0 8px; }
+  p { font-size: 13.5px; line-height: 1.6; color: #4A5A50; margin: 6px 0; }
+  .spinner {
+    width: 32px; height: 32px; margin: 18px auto;
+    border: 3px solid #E3DFD4; border-top-color: #C9A84C; border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .viewer { width: 100%; max-width: 900px; height: 82vh; border: none; border-radius: 12px; display: none; }
+  .download-btn {
+    display: inline-block; margin-top: 14px; padding: 10px 20px;
+    background: #C9A84C; color: #1A3D2B; border-radius: 10px; text-decoration: none;
+    font-weight: 700; font-size: 13.5px;
+  }
+  .error { color: #B3261E; }
+  #shell { width: 100%; display: flex; flex-direction: column; align-items: center; }
+</style>
+</head>
+<body>
+<div id="shell">
+  <div class="card" id="statusCard">
+    <h1>Decrypting report locally in your browser…</h1>
+    <div class="spinner"></div>
+    <p>Nothing is sent to any server except the encrypted file itself. Decryption happens on this device.</p>
+    <p>解密全程在您的浏览器本地完成，只有加密后的文件字节会被读取，密钥不会发送给任何服务器。</p>
+  </div>
+</div>
+<script>
+// 这个页面是"分享给医生"功能的查看页——医生打开分享链接后，靠这段
+// 内联JS在浏览器本地用Web Crypto API解密医疗报告并显示。
+//
+// ⛔ 这个仓库/页面是医生解密数据的执行环境，一旦被篡改，攻击者能改
+// 这段JS把URL fragment里的解密密钥偷偷发走——密钥是整个零知识承诺
+// 的最后一道防线。因此：
+// ⛔ 不许引入任何外部脚本/CDN/字体——全部代码必须内联在这个文件里，
+//   引入外部资源＝把这个执行环境的完整性交给另一个你不控制的服务器。
+// ⛔ 不许引入任何第三方分析/埋点脚本（Google Analytics等）——医生
+//   打开这个页面这件事本身，以及页面执行环境的干净程度，都不该被
+//   第三方观测到。
+// 改这个文件前，先确认改动没有违反以上两条。
+//
+// 密文来源：Supabase Edge Function sfk-doctor-share-view（见
+// sfk-v1-core仓库 supabase/functions/sfk-doctor-share-view/index.ts），
+// 跨域fetch，该函数只放行这一个域名的CORS（Access-Control-Allow-Origin
+// 精确匹配，不是*）。
+(function () {
+  var SHARE_API_BASE =
+    'https://ptmfqxfmymhzqgpkxixm.supabase.co/functions/v1/sfk-doctor-share-view';
+
+  var params = new URLSearchParams(window.location.search);
+  var shareId = (params.get('id') || '').replace(/[^a-zA-Z0-9-]/g, '');
+  var statusCard = document.getElementById('statusCard');
+
+  function showError(en, zh) {
+    statusCard.innerHTML =
+      '<h1 class="error">' + en + '</h1><p>' + zh + '</p>';
+  }
+
+  if (!shareId) {
+    showError(
+      'Link expired or revoked · 链接已失效或被撤销',
+      'This shared report link is no longer valid, or the address is incorrect.<br>此分享链接已失效，或链接地址有误。'
+    );
+    return;
+  }
+
+  var hash = window.location.hash || '';
+  var match = hash.match(/[#&]k=([^&]+)/);
+  if (!match) {
+    showError(
+      'Missing decryption key in link',
+      '链接缺少解密密钥片段，无法解密——请确认链接是完整复制/转发的。'
+    );
+    return;
+  }
+  var keyB64Url = match[1];
+
+  function b64UrlToBytes(b64url) {
+    var b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  var keyBytes = b64UrlToBytes(keyB64Url);
+
+  fetch(SHARE_API_BASE + '?id=' + encodeURIComponent(shareId) + '&raw=1')
+    .then(function (res) {
+      if (res.status === 404) throw new Error('not_found');
+      if (!res.ok) throw new Error('fetch_failed');
+      return res.arrayBuffer();
+    })
+    .then(function (combined) {
+      var bytes = new Uint8Array(combined);
+      // 上传时的拼接顺序：12字节nonce || (密文+16字节GCM tag)——跟
+      // encrypt_doctor_share_pdf.dart里的DoctorShareEncryptResult是
+      // 同一份约定，两边必须保持一致，改一边要同时改另一边。
+      var iv = bytes.slice(0, 12);
+      var ciphertextAndTag = bytes.slice(12);
+      return crypto.subtle
+        .importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt'])
+        .then(function (cryptoKey) {
+          return crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: iv },
+            cryptoKey,
+            ciphertextAndTag
+          );
+        });
+    })
+    .then(function (plainBuffer) {
+      var blob = new Blob([plainBuffer], { type: 'application/pdf' });
+      var blobUrl = URL.createObjectURL(blob);
+
+      statusCard.remove();
+      var iframe = document.createElement('iframe');
+      iframe.className = 'viewer';
+      iframe.src = blobUrl;
+      iframe.style.display = 'block';
+      document.getElementById('shell').appendChild(iframe);
+
+      var dl = document.createElement('a');
+      dl.className = 'download-btn';
+      dl.href = blobUrl;
+      dl.download = 'health-report.pdf';
+      dl.textContent = 'Download PDF · 下载PDF';
+      document.getElementById('shell').appendChild(dl);
+    })
+    .catch(function (err) {
+      if (err && err.message === 'not_found') {
+        showError(
+          'Link expired or revoked · 链接已失效或被撤销',
+          'This shared report link is no longer valid. It may have expired, been revoked by the sender, or the address is incorrect.<br>此分享链接已失效——可能已过期、已被发送方撤销，或链接地址有误。'
+        );
+        return;
+      }
+      showError(
+        'Link expired or could not be decrypted',
+        '链接已失效，或解密失败——请向分享方确认链接是否完整、是否已被撤销。'
+      );
+    });
+})();
+</script>
+</body>
+</html>
