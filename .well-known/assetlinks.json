@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "net.sfkey.health",
       "sha256_cert_fingerprints": [
-        "36:14:BD:5F:DC:CD:71:B0:47:DD:69:59:3D:52:47:52:88:97:78:81:3B:18:3F:49:CA:03:93:FC:E3:40:FC:EB"
+        "36:14:BD:5F:DC:CD:71:B0:47:DD:69:59:3D:52:47:52:88:97:78:81:3B:18:3F:49:CA:03:93:FC:E3:40:FC:EB",
+        "7D:87:24:0C:A4:95:F2:7C:C7:F2:76:0E:A1:D3:02:9B:50:71:98:66:C0:69:A9:02:E4:14:4C:5D:D7:D0:21:A6"
       ]
     }
   }
