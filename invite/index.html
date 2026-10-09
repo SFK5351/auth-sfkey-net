@@ -30,6 +30,7 @@
   }
   .title { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
   .subtitle { font-size: 13px; color: #666; margin: 0 0 20px; }
+  .subtitle-en { font-size: 12px; color: #888; margin: -14px 0 20px; }
   .code {
     font-size: 32px;
     font-weight: 700;
@@ -57,6 +58,17 @@
     border-top: 1px solid #eee;
     padding-top: 16px;
   }
+  .stores { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .store-link {
+    display: block;
+    border: 1px solid #1A3D2B;
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: #1A3D2B;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+  }
   .copy-btn {
     display: inline-block;
     background: #C9A84C;
@@ -73,20 +85,27 @@
 <body>
   <div class="card">
     <p class="title">SFK Wellness 邀请码</p>
-    <p class="subtitle">好友邀请你注册，一起获得 Token 奖励</p>
+    <!-- 10-09 创始人定：机构码（SFKB-）、推广商码（SFKP-）与不带码时用中性一句，不提好友与 Token 奖励（WALLET-2 §六 3）；
+         只有个人邀请码（SFK-）显示原文案，由下方脚本切换。静态默认就是中性版：脚本没跑时也不会出现奖励说法。 -->
+    <p class="subtitle" id="subtitle">欢迎使用 SFK Wellness，请下载 App 并用此邀请码注册</p>
+    <p class="subtitle-en" id="subtitleEn">Welcome to SFK Wellness. Please download the app and sign up with this invite code.</p>
     <div class="code" id="codeText">——</div>
     <button class="copy-btn" id="copyBtn" onclick="copyCode()">复制邀请码</button>
     <p class="hint" id="copyHint"></p>
     <ol class="steps">
       <li>下载并打开 SFK Wellness App</li>
       <li>点击"注册"，在"邀请码（选填）"栏填入上面的码</li>
-      <li>完成注册，你和好友各自获得 Token 奖励</li>
+      <li id="step3">完成注册</li>
     </ol>
-    <p class="store-note">
-      <!-- App正式上架后，把下面这行换成真实的App Store/Play Store链接。
-           现在还没上架，先不放一个会404的死链接。 -->
-      App 即将上线，敬请期待
-    </p>
+    <div class="store-note">
+      <!-- TD-168（2026-09-22）：商店链接只对【已上架】的那家显示，由下方 STORES 开关控制。
+           发布日「对应商店可下载后」在执行单那一步把开关打开再推送；未上架的一家⛔ 放链接（⛔ 放会 404 的死链接）。 -->
+      <p id="comingSoon">App 即将上线，敬请期待</p>
+      <div class="stores" id="stores" hidden>
+        <a class="store-link" id="iosLink" hidden>在 App Store 下载</a>
+        <a class="store-link" id="androidLink" hidden>在 Google Play 下载</a>
+      </div>
+    </div>
   </div>
   <script>
     // 这个页面是Universal Links/App Links的兜底：手机上已经装了App时，
@@ -98,6 +117,41 @@
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code') || '';
     document.getElementById('codeText').textContent = code || '（邀请码缺失）';
+    // 个人邀请码（SFK- 加 6 位）才显示好友奖励文案；SFKB-／SFKP-／不带码保持中性版
+    if (/^SFK-[A-Z0-9]{6}$/i.test(code)) {
+      document.getElementById('subtitle').textContent = '好友邀请您注册，一起获得 Token 奖励';
+      document.getElementById('subtitleEn').hidden = true;
+      document.getElementById('step3').textContent = '完成注册，您和好友各自获得 Token 奖励';
+    }
+
+    // ── 商店开关（TD-168）：只有在对应商店【已可下载】时才改为 true，并在执行单那一步里推送 ──
+    // iOS：appId 取 App Store Connect →「App 信息」→ Apple ID（纯数字）；为空 ⇒ ⛔ 显示 iOS 链接。
+    const STORES = {
+      ios: { live: true, appId: '6791440396' },
+      android: { live: true, packageId: 'net.sfkey.health' },
+    };
+    // 安卓链接预留 referrer 参数位（供 TD-166 的 Google Play Install Referrer 读取）；
+    // 取值格式为终端暂定 `sfk_code=<邀请码>`，TD-166 实现读取时以其为准再对齐。
+    function playUrl() {
+      let url = 'https://play.google.com/store/apps/details?id=' + encodeURIComponent(STORES.android.packageId);
+      if (code) url += '&referrer=' + encodeURIComponent('sfk_code=' + code);
+      return url;
+    }
+    let anyLive = false;
+    if (STORES.ios.live && /^[0-9]+$/.test(STORES.ios.appId)) {
+      const a = document.getElementById('iosLink');
+      a.href = 'https://apps.apple.com/app/id' + STORES.ios.appId;
+      a.hidden = false; anyLive = true;
+    }
+    if (STORES.android.live) {
+      const a = document.getElementById('androidLink');
+      a.href = playUrl();
+      a.hidden = false; anyLive = true;
+    }
+    if (anyLive) {
+      document.getElementById('stores').hidden = false;
+      document.getElementById('comingSoon').hidden = true;
+    }
 
     function copyCode() {
       if (!code) return;
