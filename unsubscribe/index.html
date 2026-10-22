@@ -6,15 +6,6 @@
 <meta name="robots" content="noindex" />
 <meta name="referrer" content="no-referrer" />
 <title>SFK Wellness</title>
-<!--
-  🔴 R15 差距 ③ · 营销邮件退订页（设计窗口 2026-09-22 午后裁定）
-  · 托管：https://auth.sfkey.net/unsubscribe/（照搬分享查看页：仓库 SFK5351/auth-sfkey-net 的 GitHub Pages，零 DNS 改动）
-    ⚠️ 本文件是【源】；发布 ＝ 复制到那个仓库的 unsubscribe/ 并推送 —— 那是生产发布，由创始人按执行单做，终端⛔ 推。
-  · 对外品牌 SFK Wellness。🔴 文案只取合规真源 lib/l10n/compliance_strings.json（由 tool/unsubscribe_page_sync.py 注入下方 JSON 块），
-    ⛔ 在本文件手写任何句子；真源缺句子 ⇒ 页面⛔ 能发布（同步工具会列出缺哪些）。
-  · 令牌在 hash（#t=…）：⛔ 进服务器日志与 Referer；读到后立刻从地址栏抹掉。
-  · 🔴 ⛔ 自动退订：必须用户点按钮才发 POST —— 邮件安全扫描器会打开链接甚至执行脚本，自动提交 ＝ 替用户退订。
--->
 <style>
   :root { --bg: #1A3D2B; --card: #FFFFFF; --ink: #1A3D2B; --btn: #C9A84C; --btn-ink: #1A3D2B; --muted: #5A6B62; }
   * { box-sizing: border-box; }
@@ -37,17 +28,16 @@
   <button id="go" type="button" hidden></button>
   <p id="note" class="note"></p>
 </main>
-<!-- COPY:BEGIN（生成块：tool/unsubscribe_page_sync.py 从 compliance_strings.json 注入，⛔ 手改） -->
+<!-- copy:begin -->
 <script id="copy" type="application/json">{"unsubAlreadyBody": {"en": "You had already unsubscribed. No further action is needed.", "zh": "您之前已经退订过，无需再次操作。"}, "unsubConfirmBody": {"en": "After you confirm, you will no longer receive marketing emails from SFK Wellness.", "zh": "确认后，您将不再收到 SFK Wellness 的营销邮件。"}, "unsubConfirmButton": {"en": "Unsubscribe", "zh": "确认退订"}, "unsubDoneBody": {"en": "You have unsubscribed from SFK Wellness marketing emails.", "zh": "您已退订 SFK Wellness 的营销邮件。"}, "unsubDoneTitle": {"en": "You're unsubscribed", "zh": "已退订"}, "unsubErrorBody": {"en": "We couldn't complete your request right now. Please try again later.", "zh": "暂时无法完成退订，请稍后再试。"}, "unsubInvalidBody": {"en": "This unsubscribe link is no longer valid. Please use the link in our most recent email.", "zh": "这个退订链接已失效。请使用最近一封邮件里的链接。"}, "unsubPageTitle": {"en": "Unsubscribe from marketing emails", "zh": "退订营销邮件"}, "unsubRateLimitedBody": {"en": "Too many attempts. Please try again later.", "zh": "操作太频繁，请稍后再试。"}, "unsubRetryButton": {"en": "Try again", "zh": "重试"}, "unsubServiceNoticeNote": {"en": "You will still receive important notices about your account and our services, such as security alerts and service changes.", "zh": "与账户和服务相关的重要通知（如安全提醒、服务变更）仍会照常发送。"}, "unsubWorking": {"en": "Processing, please wait…", "zh": "正在处理，请稍候…"}}</script>
-<!-- COPY:END -->
+<!-- copy:end -->
 <script>
-// ==================== 退订页逻辑（纯函数，供测试）====================
+// ---- pure helpers ----
 const UNSUB_ENDPOINT = 'https://ptmfqxfmymhzqgpkxixm.supabase.co/functions/v1/sfk-email-unsubscribe';
 function unsubTokenFromHash(hash) {
   const m = /(?:^#|&)t=([0-9a-f]{64})(?:&|$)/.exec(hash || '');
   return m ? m[1] : null;
 }
-// 服务端状态 ⇒ 页面要显示的文案键（缺键 ⇒ 页面⛔ 能发布，见同步工具）
 function unsubViewFor(state) {
   return ({
     confirm:      { title: 'unsubPageTitle', body: 'unsubConfirmBody', button: 'unsubConfirmButton', note: 'unsubServiceNoticeNote' },
@@ -59,14 +49,14 @@ function unsubViewFor(state) {
     error:        { title: 'unsubPageTitle', body: 'unsubErrorBody', button: 'unsubRetryButton' },
   })[state] || null;
 }
-// ==================== 退订页逻辑 end ====================
+// ---- end pure helpers ----
 (function () {
   const COPY = JSON.parse(document.getElementById('copy').textContent || '{}');
   const lang = /^zh/i.test(navigator.language || '') ? 'zh' : 'en';
   document.documentElement.lang = lang;
   const t = (k) => (k && COPY[k] && COPY[k][lang]) || '';
   const token = unsubTokenFromHash(location.hash);
-  if (location.hash) history.replaceState(null, '', location.pathname);   // ⭐ 抹掉地址栏里的令牌
+  if (location.hash) history.replaceState(null, '', location.pathname);   // remove the token from the address bar
   const $ = (id) => document.getElementById(id);
   function show(state) {
     const v = unsubViewFor(state) || {};
